@@ -214,6 +214,7 @@ def filter_practical_enzymes(
     require_palindromic: bool = True,
     require_unambiguous: bool = True,
     exclude_unusual: bool = True,
+    deduplicate_sites: bool = True,
 ) -> Tuple[List[EnzymeMetadata], Dict[str, int]]:
     kept: List[EnzymeMetadata] = []
     reasons: Dict[str, int] = defaultdict(int)
@@ -234,19 +235,21 @@ def filter_practical_enzymes(
 
     kept.sort(key=lambda x: x.enzyme)
 
-    seen_sites: dict[str, str] = {}
-    deduped: List[EnzymeMetadata] = []
-    n_duplicates = 0
-    for e in kept:
-        if e.site in seen_sites:
-            n_duplicates += 1
-        else:
-            seen_sites[e.site] = e.enzyme
-            deduped.append(e)
-    if n_duplicates:
-        reasons["duplicate_site"] = n_duplicates
+    if deduplicate_sites:
+        seen_sites: dict[str, str] = {}
+        deduped: List[EnzymeMetadata] = []
+        n_duplicates = 0
+        for e in kept:
+            if e.site in seen_sites:
+                n_duplicates += 1
+            else:
+                seen_sites[e.site] = e.enzyme
+                deduped.append(e)
+        if n_duplicates:
+            reasons["duplicate_site"] = n_duplicates
+        kept = deduped
 
-    return deduped, dict(reasons)
+    return kept, dict(reasons)
 
 # ---------------------------------------------------------------------------
 # Motif scanning & cut-site indexing
