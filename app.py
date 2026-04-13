@@ -71,8 +71,8 @@ with st.sidebar:
     enzyme_csv = None
     if enzyme_source == "CSV file":
         enzyme_csv = st.file_uploader(
-            "Enzyme CSV (columns: enzyme, site, size, cut_type)",
-            type=["csv"],
+            "Enzyme file (columns: Enzyme, Site — CSV or TXT)",
+            type=["csv", "txt"],
         )
 
     st.subheader("Filter settings")
@@ -131,28 +131,56 @@ if useful_min >= useful_max:
 # ── Step 1: Load enzymes ───────────────────────────────────────────────────
 with st.status("Loading enzymes...", expanded=True) as status:
     if enzyme_source == "CSV file" and enzyme_csv is not None:
-        from engine import EnzymeMetadata
-        df_enz = pd.read_csv(enzyme_csv)
+        from engine import EnzymeMetadata, reverse_complement, is_unambiguous_site
+        import io as _io
+
+        raw_bytes = enzyme_csv.read()
+        for enc in ("utf-8-sig", "utf-16", "utf-8", "latin-1"):
+            try:
+                raw_text = raw_bytes.decode(enc)
+                break
+            except (UnicodeDecodeError, UnicodeError):
+                continue
+        else:
+            raw_text = raw_bytes.decode("utf-8", errors="replace")
+        raw_text = raw_text.replace('"', '').replace('\r', '')
+        df_enz = pd.read_csv(_io.StringIO(raw_text))
+
+        df_enz.columns = df_enz.columns.str.strip().str.lower()
+        if "enzyme" not in df_enz.columns and len(df_enz.columns) >= 2:
+            df_enz.columns = ["enzyme", "site"] + list(df_enz.columns[2:])
+
         required_cols = {"enzyme", "site"}
         if not required_cols.issubset(df_enz.columns):
-            st.error(f"CSV must contain columns: {required_cols}")
+            st.error(
+                f"Could not find columns **enzyme** and **site** in your file. "
+                f"Found columns: {list(df_enz.columns)}"
+            )
             st.stop()
+
         all_enzymes = []
         for _, r in df_enz.iterrows():
+            site = str(r["site"]).strip().upper()
+            size = int(r.get("size", len(site))) if "size" in df_enz.columns else len(site)
+            palindromic = (
+                bool(site)
+                and is_unambiguous_site(site)
+                and site == reverse_complement(site)
+            )
             all_enzymes.append(
                 EnzymeMetadata(
-                    enzyme=str(r["enzyme"]),
-                    site=str(r.get("site", "")).upper(),
-                    size=int(r.get("size", len(str(r.get("site", ""))))),
-                    palindromic=False,
-                    cut_type=str(r.get("cut_type", "unknown")),
+                    enzyme=str(r["enzyme"]).strip(),
+                    site=site,
+                    size=size,
+                    palindromic=palindromic,
+                    cut_type=str(r.get("cut_type", "unknown")).strip() if "cut_type" in df_enz.columns else "unknown",
                     overhang_length=None, ovhgseq="", substrat="",
                     freq="", suppl="", opt_temp="", inact_temp="",
                     fst5=None, fst3=None, scd5=None, scd3=None,
                     charac="", uri="", enzyme_id="",
                 )
             )
-        st.write(f"Loaded **{len(all_enzymes)}** enzymes from CSV.")
+        st.write(f"Loaded **{len(all_enzymes)}** enzymes from file.")
     else:
         all_enzymes = load_biopython_enzymes()
         st.write(f"Loaded **{len(all_enzymes):,}** enzymes from Biopython.")
