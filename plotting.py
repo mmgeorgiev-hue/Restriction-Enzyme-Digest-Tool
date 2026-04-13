@@ -1,5 +1,5 @@
 """
-Plotting helpers — each function returns a ``matplotlib.figure.Figure``
+Plotting helpers â€” each function returns a ``matplotlib.figure.Figure``
 so the caller (Streamlit or a notebook) can display it however it likes.
 """
 
@@ -30,6 +30,7 @@ def ranked_bar_chart(
 
     fig, ax = plt.subplots(figsize=(max(10, 0.28 * len(labels)), 5.5))
     bars = ax.bar(range(len(labels)), values, color="#4c78a8")
+    ax.set_ylim(0, 100)
     ax.set_xticks(range(len(labels)))
     ax.set_xticklabels(labels, rotation=75, ha="right", fontsize=7)
     ax.set_ylabel(ylabel)
@@ -81,7 +82,7 @@ def top_violin(
     ax.set_xticks(range(1, len(labels) + 1))
     ax.set_xticklabels(labels, rotation=55, ha="right", fontsize=8)
     ax.set_ylabel("Fragment size (bp, log)")
-    ax.set_title(f"Insertion fragment distributions — top {len(labels)} enzymes")
+    ax.set_title(f"Insertion fragment distributions â€” top {len(labels)} enzymes")
     fig.tight_layout()
     return fig
 
@@ -97,16 +98,19 @@ def best_mid_poor_histogram(
         ax.text(0.5, 0.5, "Need >= 3 enzymes", ha="center", va="center")
         return fig
 
+    best = summary_rows[0]
+    mid = summary_rows[len(summary_rows) // 2]
+    poor = summary_rows[-1]
     picks = [
-        summary_rows[0],
-        summary_rows[len(summary_rows) // 2],
-        summary_rows[-1],
+        ("Best", best),
+        ("Medium", mid),
+        ("Poor", poor),
     ]
-    labels = [row_label(r) for r in picks]
 
     fig, ax = plt.subplots(figsize=(9, 5.5))
-    for lbl in labels:
-        d = insertion_sizes.get(lbl, [])
+    for tag, row in picks:
+        lbl = f"{tag}: {row_label(row)}"
+        d = insertion_sizes.get(row_label(row), [])
         if not d:
             continue
         weights = [100.0 / len(d)] * len(d)
