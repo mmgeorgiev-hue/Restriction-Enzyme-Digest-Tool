@@ -83,6 +83,12 @@ with st.sidebar:
     )
     require_palindromic = st.checkbox("Require palindromic", value=True)
     exclude_unusual = st.checkbox("Exclude unusual cut behavior", value=True)
+    deduplicate_sites = st.checkbox(
+        "Remove duplicate recognition sites (isoschizomers)",
+        value=True,
+        help="When enabled, only one representative enzyme is kept per unique "
+             "recognition sequence. Disable to see all isoschizomers.",
+    )
 
     st.subheader("Fragment size range")
     col_min, col_max = st.columns(2)
@@ -157,6 +163,7 @@ with st.status("Loading enzymes...", expanded=True) as status:
         require_palindromic=require_palindromic,
         require_unambiguous=True,
         exclude_unusual=exclude_unusual,
+        deduplicate_sites=deduplicate_sites,
     )
     st.write(f"**{len(filtered):,}** enzymes pass filters.")
     if reason_counts:
@@ -228,28 +235,29 @@ insertion_sizes_by_label = {
 st.divider()
 st.header("Results")
 
-# Summary table
-tab_table, tab_collapsed = st.tabs(["Per-enzyme summary", "Collapsed by motif"])
+# Summary table with isoschizomer toggle
+show_iso = st.toggle(
+    "Show isoschizomers",
+    value=False,
+    help="When enabled, every isoschizomer (enzyme sharing the same recognition "
+         "site) gets its own row. When disabled, only one representative per "
+         "unique site is shown.",
+)
 
-with tab_table:
-    df_summary = pd.DataFrame(summary_rows)
-    st.dataframe(df_summary, use_container_width=True, height=450)
-    st.download_button(
-        "Download CSV",
-        df_summary.to_csv(index=False).encode(),
-        "enzyme_summary.csv",
-        "text/csv",
-    )
+if show_iso:
+    df_display = pd.DataFrame(summary_rows)
+    csv_name = "enzyme_summary_all.csv"
+else:
+    df_display = pd.DataFrame(collapsed_rows)
+    csv_name = "enzyme_summary.csv"
 
-with tab_collapsed:
-    df_collapsed = pd.DataFrame(collapsed_rows)
-    st.dataframe(df_collapsed, use_container_width=True, height=450)
-    st.download_button(
-        "Download CSV",
-        df_collapsed.to_csv(index=False).encode(),
-        "enzyme_summary_collapsed.csv",
-        "text/csv",
-    )
+st.dataframe(df_display, use_container_width=True, height=450)
+st.download_button(
+    "Download CSV",
+    df_display.to_csv(index=False).encode(),
+    csv_name,
+    "text/csv",
+)
 
 # Plots
 st.subheader("Plots")
