@@ -1,5 +1,5 @@
 """
-Plotting helpers â€” each function returns a ``matplotlib.figure.Figure``
+Each function returns a ``matplotlib.figure.Figure``
 so the caller (Streamlit or a notebook) can display it however it likes.
 """
 
@@ -93,37 +93,63 @@ def best_mid_poor_histogram(
     useful_min: int = 500,
     useful_max: int = 5000,
 ) -> plt.Figure:
+    import math
+
     if len(summary_rows) < 3:
         fig, ax = plt.subplots()
         ax.text(0.5, 0.5, "Need >= 3 enzymes", ha="center", va="center")
         return fig
 
-    best = summary_rows[0]
-    mid = summary_rows[len(summary_rows) // 2]
-    poor = summary_rows[-1]
     picks = [
-        ("Best", best),
-        ("Medium", mid),
-        ("Poor", poor),
+        ("Best", summary_rows[0]),
+        ("Medium", summary_rows[len(summary_rows) // 2]),
+        ("Poor", summary_rows[-1]),
     ]
+    palette = {"Best": "#2ca25f", "Medium": "#3182bd", "Poor": "#de2d26"}
 
-    fig, ax = plt.subplots(figsize=(9, 5.5))
+    all_sizes = [
+        s for _, row in picks
+        for s in insertion_sizes.get(row_label(row), []) if s > 0
+    ]
+    if not all_sizes:
+        fig, ax = plt.subplots()
+        ax.text(0.5, 0.5, "No data", ha="center", va="center")
+        return fig
+
+    log_min = math.log10(max(1, min(all_sizes)))
+    log_max = math.log10(max(all_sizes))
+    n_bins = 35
+    bins = [10 ** (log_min + (log_max - log_min) * i / n_bins) for i in range(n_bins + 1)]
+
+    fig, ax = plt.subplots(figsize=(13, 8.5))
     for tag, row in picks:
-        lbl = f"{tag}: {row_label(row)}"
         d = insertion_sizes.get(row_label(row), [])
         if not d:
             continue
+        usable_pct = float(row["pct_usable_insertions"])
+        lbl = f"{tag}: {row_label(row)} ({usable_pct:.1f}% usable)"
         weights = [100.0 / len(d)] * len(d)
-        ax.hist(d, bins=80, alpha=0.4, label=lbl, weights=weights)
+        ax.hist(
+            d, bins=bins, weights=weights, alpha=0.5,
+            label=lbl, color=palette[tag], edgecolor="none",
+        )
 
     ax.set_xscale("log")
     ax.set_ylim(0, 100)
-    ax.axvline(useful_min, color="black", ls="--", lw=1.3)
-    ax.axvline(useful_max, color="black", ls="--", lw=1.3)
-    ax.set_xlabel("Fragment size (bp, log)")
-    ax.set_ylabel("% of insertions")
-    ax.set_title("Best vs. median vs. poor enzyme")
-    ax.legend(fontsize=8)
+    ax.axvline(useful_min, color="black", ls="--", lw=1.8)
+    ax.axvline(useful_max, color="black", ls="--", lw=1.8)
+    ax.axvspan(useful_min, useful_max, color="#b2df8a", alpha=0.12)
+    ax.set_xlabel("Insertion-derived fragment size (bp, log scale)")
+    ax.set_ylabel("% of simulated insertions in each size bin")
+    ax.set_title("Best vs. medium vs. poor (ranked by % usable insertions)")
+    ax.text(
+        0.01, 0.98,
+        f"Shaded region = usable iPCR window ({useful_min:,}\u2013{useful_max:,} bp)\n"
+        "Bar height shows the % of insertions in each size bin.",
+        transform=ax.transAxes, ha="left", va="top", fontsize=9,
+        bbox={"facecolor": "white", "alpha": 0.85, "edgecolor": "#cccccc"},
+    )
+    ax.legend(title="Overall usable insertion rate", fontsize=9)
     fig.tight_layout()
     return fig
 
