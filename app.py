@@ -46,9 +46,9 @@ st.set_page_config(
     layout="wide",
 )
 
-st.title("Restriction Enzyme Digest & iPCR Prioritization")
+st.title("S.L.I.C.E.")
 st.markdown(
-    "Upload a reference genome (FASTA), configure digest parameters, "
+    "Simulated Ligation and Insertion Compatibility Evaluator. Upload a reference genome (FASTA), configure digest parameters, "
     "and get a ranked summary of restriction enzymes for iPCR experiments."
 )
 
