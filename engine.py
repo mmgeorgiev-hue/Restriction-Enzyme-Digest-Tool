@@ -488,32 +488,23 @@ def evaluate_transgene(
 # ---------------------------------------------------------------------------
 
 def _row_sort_key(row: dict) -> tuple:
-    """Sort enzymes so the best iPCR candidates appear first.
+    """Three-criterion ranking, easy to explain and biologically motivated:
 
-    Tier 1 — enzymes that cut the selected border zone are always last.
-    Tier 2 — enzymes that cut the T-DNA *anywhere* are penalised: each
-             internal cut measurably hurts iPCR (it shortens the
-             flanking fragment you can amplify), so a tiered penalty
-             pushes "many internal cuts" below "few or none".
-    Tier 3 — within a tier, sort by % usable insertions, then % useful
-             fragments, then absolute T-DNA cut count.
+    1. **Border safety** — enzymes that cut the selected T-DNA border
+       zone are pushed to the bottom (the iPCR primer site is
+       destroyed there).
+    2. **% usable insertions** — higher is better. This is the actual
+       experimental success rate: the fraction of simulated insertions
+       whose flanking fragment falls inside the iPCR size window.
+    3. **T-DNA cut count** — fewer is better. Used as a tiebreaker
+       between enzymes with similar usable rates, since each extra
+       internal cut shortens the T-DNA-derived flanking fragment.
     """
-    is_poor = 1 if row["ranking_bucket"] == "poor_selected_border_cut" else 0
-    cuts = int(row["tdna_cut_count"])
-    if cuts == 0:
-        cut_tier = 0
-    elif cuts <= 2:
-        cut_tier = 1
-    elif cuts <= 5:
-        cut_tier = 2
-    else:
-        cut_tier = 3
+    border_unsafe = 0 if row["selected_border_ok"] else 1
     return (
-        is_poor,
-        cut_tier,
+        border_unsafe,
         -float(row["pct_usable_insertions"]),
-        -float(row["pct_useful_fragments"]),
-        cuts,
+        int(row["tdna_cut_count"]),
     )
 
 
