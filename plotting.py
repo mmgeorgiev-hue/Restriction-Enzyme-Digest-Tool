@@ -220,8 +220,15 @@ def sites_per_chromosome_heatmap(
     summary_rows: List[dict],
     motif_metrics: dict,
     top_n: int = 15,
+    exclude_patterns: tuple = ("scaffold", "centromere", "unplaced", "chrUn"),
 ) -> plt.Figure:
-    """Simple heatmap of cut-site density per chromosome for top enzymes."""
+    """Heatmap of cut-site density per chromosome for top enzymes.
+
+    Contigs whose names contain any of the substrings in *exclude_patterns*
+    (case-insensitive) are filtered out, so the figure shows only the
+    primary chromosomes (e.g. Bd1-Bd5) and not centromere or scaffold
+    contigs that would otherwise dominate the x-axis.
+    """
     import numpy as np
 
     top = summary_rows[:top_n]
@@ -230,13 +237,26 @@ def sites_per_chromosome_heatmap(
         ax.text(0.5, 0.5, "No data", ha="center", va="center")
         return fig
 
+    def _keep(name: str) -> bool:
+        n = name.lower()
+        return not any(p.lower() in n for p in exclude_patterns)
+
     all_chroms: list = []
     for r in top:
         m = motif_metrics[r["site"]]
         for c in m.sites_per_chromosome:
-            if c not in all_chroms:
+            if c not in all_chroms and _keep(c):
                 all_chroms.append(c)
     all_chroms.sort()
+
+    if not all_chroms:
+        fig, ax = plt.subplots()
+        ax.text(
+            0.5, 0.5,
+            "All contigs were filtered out by exclude_patterns",
+            ha="center", va="center",
+        )
+        return fig
 
     labels = [row_label(r) for r in top]
     matrix = []
