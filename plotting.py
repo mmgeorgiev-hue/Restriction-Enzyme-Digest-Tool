@@ -1,5 +1,5 @@
 """
-Each function returns a ``matplotlib.figure.Figure``
+Plotting helpers each function returns a ``matplotlib.figure.Figure``
 so the caller (Streamlit or a notebook) can display it however it likes.
 """
 
@@ -53,8 +53,20 @@ def top_violin(
         return fig
 
     top = summary_rows[:top_n]
-    labels = [row_label(r) for r in top]
-    data = [insertion_sizes.get(lbl, [1]) for lbl in labels]
+    labels: List[str] = []
+    data: List[List[int]] = []
+    for r in top:
+        lbl = row_label(r)
+        sizes = [s for s in insertion_sizes.get(lbl, []) if s > 0]
+        if not sizes:
+            continue
+        labels.append(lbl)
+        data.append(sizes)
+
+    if not data:
+        fig, ax = plt.subplots()
+        ax.text(0.5, 0.5, "No insertion data", ha="center", va="center")
+        return fig
 
     fig, ax = plt.subplots(figsize=(max(10, 0.7 * len(labels)), 5.5))
 
@@ -82,7 +94,7 @@ def top_violin(
     ax.set_xticks(range(1, len(labels) + 1))
     ax.set_xticklabels(labels, rotation=55, ha="right", fontsize=8)
     ax.set_ylabel("Fragment size (bp, log)")
-    ax.set_title(f"Insertion fragment distributions top {len(labels)} enzymes")
+    ax.set_title(f"Insertion fragment distributions â€” top {len(labels)} enzymes")
     fig.tight_layout()
     return fig
 
@@ -102,10 +114,10 @@ def best_mid_poor_histogram(
 
     picks = [
         ("Best", summary_rows[0]),
-        ("Medium", summary_rows[len(summary_rows) // 2]),
+        ("Mid", summary_rows[len(summary_rows) // 2]),
         ("Poor", summary_rows[-1]),
     ]
-    palette = {"Best": "#2ca25f", "Medium": "#3182bd", "Poor": "#de2d26"}
+    palette = {"Best": "#2ca25f", "Mid": "#3182bd", "Poor": "#de2d26"}
 
     all_sizes = [
         s for _, row in picks
@@ -141,7 +153,7 @@ def best_mid_poor_histogram(
     ax.axvspan(useful_min, useful_max, color="#b2df8a", alpha=0.12)
     ax.set_xlabel("Insertion-derived fragment size (bp, log scale)")
     ax.set_ylabel("% of simulated insertions in each size bin")
-    ax.set_title("Best vs. medium vs. poor (ranked by % usable insertions)")
+    ax.set_title("Best vs. mid vs. poor (ranked by % usable insertions)")
     ax.text(
         0.01, 0.98,
         f"Shaded region = usable iPCR window ({useful_min:,}\u2013{useful_max:,} bp)\n"
@@ -150,6 +162,56 @@ def best_mid_poor_histogram(
         bbox={"facecolor": "white", "alpha": 0.85, "edgecolor": "#cccccc"},
     )
     ax.legend(title="Overall usable insertion rate", fontsize=9)
+    fig.tight_layout()
+    return fig
+
+
+def fragment_balance_bar(
+    summary_rows: List[dict],
+    insertion_sizes: Dict[str, List[int]],
+    useful_min: int = 500,
+    useful_max: int = 5000,
+    top_n: int = 20,
+) -> plt.Figure:
+    """Horizontal stacked bar: % too-small / usable / too-large per enzyme."""
+    if not summary_rows:
+        fig, ax = plt.subplots()
+        ax.text(0.5, 0.5, "No data", ha="center", va="center")
+        return fig
+
+    top = summary_rows[:top_n]
+    labels = [row_label(r) for r in top]
+    pct_small, pct_useful, pct_large = [], [], []
+
+    for r in top:
+        d = insertion_sizes.get(row_label(r), [])
+        n = len(d)
+        if n == 0:
+            pct_small.append(0.0)
+            pct_useful.append(0.0)
+            pct_large.append(0.0)
+            continue
+        ns = sum(1 for x in d if x < useful_min)
+        nu = sum(1 for x in d if useful_min <= x <= useful_max)
+        nl = sum(1 for x in d if x > useful_max)
+        pct_small.append(100.0 * ns / n)
+        pct_useful.append(100.0 * nu / n)
+        pct_large.append(100.0 * nl / n)
+
+    fig_h = max(6, 0.35 * len(labels))
+    fig, ax = plt.subplots(figsize=(12, fig_h))
+    ax.barh(labels, pct_small, color="#d95f02", label=f"< {useful_min:,} bp")
+    ax.barh(labels, pct_useful, left=pct_small, color="#1b9e77",
+            label=f"Usable ({useful_min:,}\u2013{useful_max:,} bp)")
+    left_for_large = [s + u for s, u in zip(pct_small, pct_useful)]
+    ax.barh(labels, pct_large, left=left_for_large, color="#7570b3",
+            label=f"> {useful_max:,} bp")
+    ax.invert_yaxis()
+    ax.set_xlim(0, 100)
+    ax.set_xlabel("% of simulated insertions")
+    ax.set_title("Insertion outcome balance")
+    ax.legend(loc="lower right", fontsize=9)
+    ax.grid(axis="x", ls=":", lw=0.8, alpha=0.6)
     fig.tight_layout()
     return fig
 
