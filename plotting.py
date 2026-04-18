@@ -82,7 +82,7 @@ def top_violin(
     ax.set_xticks(range(1, len(labels) + 1))
     ax.set_xticklabels(labels, rotation=55, ha="right", fontsize=8)
     ax.set_ylabel("Fragment size (bp, log)")
-    ax.set_title(f"Insertion fragment distributions â€” top {len(labels)} enzymes")
+    ax.set_title(f"Insertion fragment distributions top {len(labels)} enzymes")
     fig.tight_layout()
     return fig
 
