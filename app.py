@@ -145,14 +145,14 @@ DEFAULT_TDNA = (
 
 # ── Page config ────────────────────────────────────────────────────────────
 st.set_page_config(
-    page_title="Restriction Enzyme Digest Tool",
+    page_title="S.L.I.C.E.",
     page_icon="🧬",
     layout="wide",
 )
 
-st.title("Restriction Enzyme Digest & iPCR Prioritization")
+st.title("S.L.I.C.E.")
 st.markdown(
-    "Upload a reference genome (FASTA), configure digest parameters, "
+    "Simulated Ligation and Insertion Compatibility Evaluator. Upload a reference genome (FASTA), configure digest parameters, "
     "and get a ranked summary of restriction enzymes for iPCR experiments."
 )
 
