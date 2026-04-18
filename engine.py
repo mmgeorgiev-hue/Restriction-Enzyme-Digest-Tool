@@ -19,7 +19,7 @@ import io
 import re
 import random
 from collections import defaultdict
-from dataclasses import dataclass, asdict
+from dataclasses import dataclass
 from pathlib import Path
 from typing import (
     BinaryIO,
@@ -120,23 +120,36 @@ def is_unambiguous_site(site: str) -> bool:
 # FASTA reading  (accepts a file path *or* an in-memory binary stream)
 # ---------------------------------------------------------------------------
 
-def read_fasta(source: Union[str, Path, BinaryIO]) -> Dict[str, str]:
-    """Return {contig_name: uppercase_sequence}.
+def read_fasta(source: Union[str, Path, bytes, BinaryIO]) -> Dict[str, str]:
+    """Return ``{contig_name: uppercase_sequence}``.
 
     *source* may be:
       - a ``pathlib.Path`` or string path (handles ``.gz`` transparently)
-      - an open binary file-like object (e.g. ``st.file_uploader`` result)
+      - raw ``bytes`` (gzip auto-detected via the magic number ``0x1f 0x8b``)
+      - an open file-like object (binary or text)
+
+    The function normalises the input to a single text iterator before
+    parsing, so the gzip / decode logic only lives in one place.
     """
     if isinstance(source, (str, Path)):
         path = Path(source)
         fh = gzip.open(path, "rt") if path.suffix == ".gz" else path.open("r")
+    elif isinstance(source, bytes):
+        if source[:2] == b"\x1f\x8b":
+            text = gzip.decompress(source).decode()
+        else:
+            text = source.decode()
+        fh = io.StringIO(text)
     else:
         raw = source.read()
-        try:
-            text = gzip.decompress(raw).decode()
-        except gzip.BadGzipFile:
-            text = raw.decode()
-        fh = io.StringIO(text)
+        if isinstance(raw, bytes):
+            if raw[:2] == b"\x1f\x8b":
+                text = gzip.decompress(raw).decode()
+            else:
+                text = raw.decode()
+            fh = io.StringIO(text)
+        else:
+            fh = io.StringIO(raw)
 
     genome: Dict[str, List[str]] = {}
     current: Optional[str] = None
@@ -162,7 +175,28 @@ def read_fasta(source: Union[str, Path, BinaryIO]) -> Dict[str, str]:
 # ---------------------------------------------------------------------------
 
 def _safe_int(v: object) -> Optional[int]:
-    return v if isinstance(v, int) else None
+    """Return ``int(v)`` for any int / float / numeric-string input.
+
+    Biopython occasionally stores fields like ``fst5`` as floats or numeric
+    strings, so a strict ``isinstance(v, int)`` check loses real data. We
+    coerce when possible and return ``None`` only when the value really
+    cannot be turned into an integer.
+    """
+    if isinstance(v, bool):
+        return int(v)
+    if isinstance(v, int):
+        return v
+    if isinstance(v, float):
+        return int(v) if v == v else None
+    if isinstance(v, str):
+        s = v.strip()
+        if not s:
+            return None
+        try:
+            return int(float(s))
+        except ValueError:
+            return None
+    return None
 
 
 def _classify_cut(ovhg: Optional[int]) -> str:
@@ -453,33 +487,34 @@ def evaluate_transgene(
 # Summary collation helpers
 # ---------------------------------------------------------------------------
 
-RANKING_ORDER = {
-    "ideal_no_tdna_cut": 0,
-    "usable_selected_border_safe": 1,
-    "poor_selected_border_cut": 2,
-}
-
-
 def _row_sort_key(row: dict) -> tuple:
+    """Sort enzymes so the best iPCR candidates appear first.
+
+    Tier 1 — enzymes that cut the selected border zone are always last.
+    Tier 2 — enzymes that cut the T-DNA *anywhere* are penalised: each
+             internal cut measurably hurts iPCR (it shortens the
+             flanking fragment you can amplify), so a tiered penalty
+             pushes "many internal cuts" below "few or none".
+    Tier 3 — within a tier, sort by % usable insertions, then % useful
+             fragments, then absolute T-DNA cut count.
+    """
+    is_poor = 1 if row["ranking_bucket"] == "poor_selected_border_cut" else 0
+    cuts = int(row["tdna_cut_count"])
+    if cuts == 0:
+        cut_tier = 0
+    elif cuts <= 2:
+        cut_tier = 1
+    elif cuts <= 5:
+        cut_tier = 2
+    else:
+        cut_tier = 3
     return (
-        RANKING_ORDER.get(str(row["ranking_bucket"]), 99),
+        is_poor,
+        cut_tier,
         -float(row["pct_usable_insertions"]),
         -float(row["pct_useful_fragments"]),
-        int(row["tdna_cut_count"]),
+        cuts,
     )
-
-
-def _serialize_chr_counts(d: Dict[str, int]) -> str:
-    return " | ".join(f"{c}: {d[c]}" for c in sorted(d))
-
-
-def _serialize_positions(positions: List[int], limit: int = 25) -> str:
-    if not positions:
-        return ""
-    text = ", ".join(str(p) for p in positions[:limit])
-    if len(positions) > limit:
-        text += f" ...(+{len(positions) - limit} more)"
-    return text
 
 
 def build_summary_table(
