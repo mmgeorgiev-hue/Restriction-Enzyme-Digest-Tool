@@ -489,9 +489,11 @@ with plot_tabs[4]:
 
 st.divider()
 st.caption(
-    "**Ranking logic:** (1) enzymes that cut the selected border zone are ranked "
-    "last; (2) the rest are bucketed by total T-DNA cut count "
-    "(0, 1\u20132, 3\u20135, 6+) so heavily-cutting enzymes drop in the list; "
-    "(3) within a bucket, sort by % usable insertions, then % useful fragments, "
-    "then absolute T-DNA cut count."
+    "**Ranking logic (top → bottom):** "
+    "**(1) Border safety** — enzymes that cut the selected T-DNA border zone "
+    "are pushed to the bottom (the iPCR primer site would be destroyed). "
+    "**(2) % usable insertions** — higher is better; this is the simulated "
+    "success rate of iPCR. "
+    "**(3) T-DNA cut count** — fewer is better; tiebreaker among enzymes with "
+    "similar usable rates."
 )
