@@ -3,7 +3,9 @@ Run a restriction digest for iPCR prioritization. Upload a reference genome (in 
 
 
 ##Run locally
-pip install -r requirements.txt
+git clone https://github.com/mmgeorgiev-hue/Restriction-Enzyme-Digest-Tool.git
+cd Restriction-Enzyme-Digest-Tool
+python3 -m pip install -r requirements.txt
 streamlit run app.py
 
 
