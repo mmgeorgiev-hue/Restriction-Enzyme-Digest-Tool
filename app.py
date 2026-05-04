@@ -165,8 +165,15 @@ def _load_biopython():
 
 
 @st.cache_data(show_spinner=False)
-def _read_genome(file_bytes: bytes, file_name: str):
-    return read_fasta(file_bytes)
+def _read_genome(file_id: str, _file_bytes: bytes):
+    """Parse the FASTA only once per unique upload.
+
+    The bytes argument is underscore-prefixed so Streamlit does NOT hash its
+    contents on every rerun (which is what made the app feel "stalled" on
+    multi-hundred-megabyte genomes). The cheap *file_id* string is the
+    actual cache key.
+    """
+    return read_fasta(_file_bytes)
 
 
 @st.cache_data(show_spinner="Scanning genome for cut sites...")
@@ -267,9 +274,9 @@ with st.sidebar:
     top_n_violin = st.slider("Top-N enzymes for violin plot", 5, 30, 12)
 
     col_run, col_reset = st.columns(2)
-    if col_run.button("Run analysis", type="primary", use_container_width=True):
+    if col_run.button("Run analysis", type="primary", width="stretch"):
         st.session_state.analysis_started = True
-    if col_reset.button("Reset", use_container_width=True):
+    if col_reset.button("Reset", width="stretch"):
         st.session_state.analysis_started = False
 
 # ── Main panel ─────────────────────────────────────────────────────────────
@@ -377,19 +384,32 @@ if not filtered:
 
 # ── Step 2: Read genome (cached) ──────────────────────────────────────────
 with st.status("Reading FASTA genome...", expanded=True) as status:
-    try:
-        fasta_file.seek(0)
-    except Exception:
-        pass
-    fasta_bytes = fasta_file.read()
-    if not fasta_bytes:
-        st.error(
-            "The uploaded FASTA file is empty. Please re-upload it and press "
-            "**Run analysis** again."
-        )
-        st.stop()
-    ghash = _genome_hash(fasta_bytes)
-    genome = _read_genome(fasta_bytes, fasta_file.name)
+    file_id = (
+        getattr(fasta_file, "file_id", None)
+        or f"{fasta_file.name}:{getattr(fasta_file, 'size', 0)}"
+    )
+
+    if st.session_state.get("_fasta_id") != file_id:
+        try:
+            fasta_file.seek(0)
+        except Exception:
+            pass
+        fasta_bytes = fasta_file.read()
+        if not fasta_bytes:
+            st.error(
+                "The uploaded FASTA file is empty. Please re-upload it and "
+                "press **Run analysis** again."
+            )
+            st.stop()
+        st.session_state["_fasta_id"] = file_id
+        st.session_state["_fasta_bytes"] = fasta_bytes
+        st.session_state["_fasta_hash"] = _genome_hash(fasta_bytes)
+        st.write("Hashing new upload...")
+    else:
+        fasta_bytes = st.session_state["_fasta_bytes"]
+
+    ghash = st.session_state["_fasta_hash"]
+    genome = _read_genome(file_id, fasta_bytes)
     contig_lengths = {c: len(s) for c, s in genome.items()}
     total_bp = sum(contig_lengths.values())
     st.write(f"**{len(genome)}** contigs, **{total_bp:,}** bp total.")
@@ -444,7 +464,7 @@ else:
     df_display = pd.DataFrame(collapsed_rows)
     csv_name = "enzyme_summary.csv"
 
-st.dataframe(df_display, use_container_width=True, height=450)
+st.dataframe(df_display, width="stretch", height=450)
 st.caption(
     "**`bp_border_to_first_cut`** = distance (bp) from the edge of the "
     "selected protected border zone to the closest internal T-DNA cut on "
