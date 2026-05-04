@@ -19,7 +19,12 @@ def ranked_bar_chart(
     value_key: str = "pct_usable_insertions",
     ylabel: str = "% usable insertions",
     title: str = "Ranked enzyme performance",
+    cmap_name: str = "YlOrRd",
 ) -> plt.Figure:
+    import numpy as np
+    from matplotlib import cm
+    from matplotlib.colors import Normalize
+
     if not summary_rows:
         fig, ax = plt.subplots()
         ax.text(0.5, 0.5, "No data", ha="center", va="center")
@@ -28,13 +33,23 @@ def ranked_bar_chart(
     labels = [row_label(r) for r in summary_rows]
     values = [float(r[value_key]) for r in summary_rows]
 
+    cmap = cm.get_cmap(cmap_name)
+    norm = Normalize(vmin=0, vmax=100)
+    colors = [cmap(norm(v)) for v in values]
+
     fig, ax = plt.subplots(figsize=(max(10, 0.28 * len(labels)), 5.5))
-    bars = ax.bar(range(len(labels)), values, color="#4c78a8")
+    ax.bar(range(len(labels)), values, color=colors, edgecolor="black", linewidth=0.4)
     ax.set_ylim(0, 100)
     ax.set_xticks(range(len(labels)))
     ax.set_xticklabels(labels, rotation=75, ha="right", fontsize=7)
     ax.set_ylabel(ylabel)
     ax.set_title(title)
+
+    sm = cm.ScalarMappable(norm=norm, cmap=cmap)
+    sm.set_array(np.asarray(values))
+    cbar = fig.colorbar(sm, ax=ax, shrink=0.7, pad=0.02)
+    cbar.set_label(ylabel)
+
     fig.tight_layout()
     return fig
 
@@ -44,6 +59,8 @@ def top_violin(
     insertion_sizes: Dict[str, List[int]],
     top_n: int = 12,
     jitter_max_points: int = 300,
+    useful_min: int = 500,
+    useful_max: int = 5000,
 ) -> plt.Figure:
     import numpy as np
 
@@ -70,32 +87,89 @@ def top_violin(
 
     fig, ax = plt.subplots(figsize=(max(10, 0.7 * len(labels)), 5.5))
 
-    parts = ax.violinplot(
-        data, showmeans=False, showmedians=False, showextrema=False,
-    )
-    for body in parts.get("bodies", []):
-        body.set_facecolor("#d3d3d3")
-        body.set_edgecolor("black")
-        body.set_linewidth(1.0)
-        body.set_alpha(0.7)
+    try:
+        from scipy.stats import gaussian_kde
+        _have_kde = True
+    except ImportError:
+        _have_kde = False
 
     rng = np.random.default_rng(42)
+    width = 0.38
+
     for i, d in enumerate(data, 1):
-        arr = np.array(d, dtype=float)
-        if len(arr) > jitter_max_points:
-            arr = rng.choice(arr, jitter_max_points, replace=False)
-        jitter = rng.uniform(-0.12, 0.12, size=len(arr))
+        arr = np.asarray([x for x in d if x > 0], dtype=float)
+        if arr.size == 0:
+            continue
+
+        log_arr = np.log10(arr)
+        lo, hi = float(log_arr.min()), float(log_arr.max())
+        pad = max(0.15, 0.05 * (hi - lo))
+        ys_log = np.linspace(lo - pad, hi + pad, 256)
+
+        if _have_kde and arr.size > 1 and (hi - lo) > 0:
+            kde = gaussian_kde(log_arr, bw_method="scott")
+            density = kde(ys_log)
+        else:
+            counts, edges = np.histogram(log_arr, bins=20)
+            centers = 0.5 * (edges[:-1] + edges[1:])
+            density = np.interp(ys_log, centers, counts.astype(float))
+
+        if density.max() > 0:
+            density = density / density.max() * width
+
+        ys = 10 ** ys_log
+        ax.fill_betweenx(
+            ys, i - density, i + density,
+            facecolor="#d3d3d3", edgecolor="black", linewidth=1.0,
+            alpha=0.7, zorder=2,
+        )
+
+        sample = arr if arr.size <= jitter_max_points else rng.choice(
+            arr, jitter_max_points, replace=False,
+        )
+        jitter = rng.uniform(-0.12, 0.12, size=sample.size)
         ax.scatter(
-            i + jitter, arr, s=6, alpha=0.55, color="black", zorder=3,
-            edgecolors="none",
+            i + jitter, sample, s=6, alpha=0.55, color="black",
+            zorder=3, edgecolors="none",
         )
 
     ax.set_yscale("log")
     ax.set_xticks(range(1, len(labels) + 1))
     ax.set_xticklabels(labels, rotation=55, ha="right", fontsize=8)
-    ax.set_ylabel("Fragment size (bp, log)")
-    ax.set_title(f"Insertion fragment distributions top {len(labels)} enzymes")
-    fig.tight_layout()
+    ax.set_ylabel("Fragment size (bp, log scale)")
+    ax.set_title(f"Insertion fragment distributions for top {len(labels)} enzymes")
+
+    ax.axhspan(useful_min, useful_max, color="#b2df8a", alpha=0.15, zorder=0)
+    ax.axhline(useful_min, color="#1b9e77", lw=0.8, ls="--", zorder=1)
+    ax.axhline(useful_max, color="#1b9e77", lw=0.8, ls="--", zorder=1)
+
+    n_per_enzyme = [
+        len([s for s in insertion_sizes.get(lbl, []) if s > 0]) for lbl in labels
+    ]
+    n_text = (
+        f"n = {n_per_enzyme[0]:,} simulated insertions per enzyme"
+        if n_per_enzyme and len(set(n_per_enzyme)) == 1
+        else f"n = {min(n_per_enzyme):,}\u2013{max(n_per_enzyme):,} per enzyme"
+    )
+
+    caption = (
+        "Figure. Distribution of in silico iPCR-amplifiable fragment sizes for the "
+        f"top {len(labels)} enzymes, ranked by % usable insertions. Each violin is a "
+        "kernel density estimate of fragment lengths (computed in log10 space and "
+        "mirrored to give a symmetric two-sided shape). Black dots are individual "
+        "simulated insertions (jittered horizontally; subsampled to "
+        f"{jitter_max_points:,} per enzyme for legibility). The shaded green band "
+        f"marks the usable iPCR window ({useful_min:,}\u2013{useful_max:,} bp); "
+        "fragments that fall inside this band can be amplified and sequenced. "
+        f"{n_text}."
+    )
+
+    fig.tight_layout(rect=(0, 0.18, 1, 1))
+    fig.text(
+        0.02, 0.02, caption,
+        ha="left", va="bottom", fontsize=8.5, wrap=True,
+        bbox={"facecolor": "white", "edgecolor": "#cccccc", "alpha": 0.9},
+    )
     return fig
 
 
