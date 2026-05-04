@@ -100,6 +100,7 @@ class TransgeneMetrics:
     tdna_no_cut: bool
     selected_border_ok: bool
     ranking_bucket: str
+    bp_border_to_first_cut: Optional[int]
 
 # ---------------------------------------------------------------------------
 # DNA helpers
@@ -470,6 +471,15 @@ def evaluate_transgene(
     else:
         bucket = "poor_selected_border_cut"
 
+    if border == "left":
+        safe_cuts = [p for p in cuts if p >= protected_bp]
+        bp_to_first = min(safe_cuts) - protected_bp if safe_cuts else None
+    else:
+        safe_cuts = [p for p in cuts if (p + mlen) <= right_start]
+        bp_to_first = (right_start - max(safe_cuts) - mlen) if safe_cuts else None
+    if bp_to_first is not None and bp_to_first < 0:
+        bp_to_first = 0
+
     return TransgeneMetrics(
         tdna_length_bp=tdna_len,
         tdna_cut_count=len(cuts),
@@ -481,6 +491,7 @@ def evaluate_transgene(
         tdna_no_cut=no_cut,
         selected_border_ok=sel_ok,
         ranking_bucket=bucket,
+        bp_border_to_first_cut=bp_to_first,
     )
 
 # ---------------------------------------------------------------------------
@@ -529,6 +540,7 @@ def build_summary_table(
             "tdna_cut_count": t.tdna_cut_count,
             "tdna_no_cut": t.tdna_no_cut,
             "selected_border_ok": t.selected_border_ok,
+            "bp_border_to_first_cut": t.bp_border_to_first_cut,
             "genome_site_count": m.genome_site_count,
             "sites_per_mb": round(m.sites_per_mb, 4),
             "n_fragments": m.n_fragments,
@@ -572,6 +584,7 @@ def build_collapsed_summary(
             "tdna_cut_count": t.tdna_cut_count,
             "tdna_no_cut": t.tdna_no_cut,
             "selected_border_ok": t.selected_border_ok,
+            "bp_border_to_first_cut": t.bp_border_to_first_cut,
             "genome_site_count": m.genome_site_count,
             "sites_per_mb": round(m.sites_per_mb, 4),
             "n_fragments": m.n_fragments,
