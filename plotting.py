@@ -5,7 +5,7 @@ so the caller (Streamlit or a notebook) can display it however it likes.
 
 from __future__ import annotations
 
-from typing import Dict, List, Union
+from typing import Dict, List, Tuple, Union
 
 import matplotlib
 matplotlib.use("Agg")
@@ -42,6 +42,96 @@ def ranked_bar_chart(
     ax.set_ylim(0, 100)
     ax.set_xticks(range(len(labels)))
     ax.set_xticklabels(labels, rotation=75, ha="right", fontsize=7)
+    ax.set_ylabel(ylabel)
+    ax.set_title(title)
+
+    sm = cm.ScalarMappable(norm=norm, cmap=cmap)
+    sm.set_array(np.asarray(values))
+    cbar = fig.colorbar(sm, ax=ax, shrink=0.7, pad=0.02)
+    cbar.set_label(ylabel)
+
+    fig.tight_layout()
+    return fig
+
+
+def best_mid_worst_bar(
+    summary_rows: List[dict],
+    n_per_group: int = 3,
+    value_key: str = "pct_usable_insertions",
+    ylabel: str = "% usable insertions",
+    title: str = "Best, mid, and worst enzymes by % usable insertions",
+    cmap_name: str = "YlOrRd",
+) -> plt.Figure:
+    """Bar chart of the top-N, middle-N, and bottom-N enzymes.
+
+    Bars are colored using the same ``YlOrRd`` colormap as the
+    cut-site heatmap and the full ranked bar chart, normalized 0-100 so
+    color is comparable across all figures in the app.
+    """
+    import numpy as np
+    from matplotlib import cm
+    from matplotlib.colors import Normalize
+
+    if len(summary_rows) < 3 * n_per_group:
+        fig, ax = plt.subplots()
+        ax.text(
+            0.5, 0.5,
+            f"Need at least {3 * n_per_group} enzymes "
+            f"(got {len(summary_rows)})",
+            ha="center", va="center",
+        )
+        return fig
+
+    n = len(summary_rows)
+    mid_start = (n - n_per_group) // 2
+    best = summary_rows[:n_per_group]
+    mid = summary_rows[mid_start:mid_start + n_per_group]
+    worst = summary_rows[-n_per_group:]
+
+    groups: List[Tuple[str, List[dict]]] = [
+        ("Best", best),
+        ("Mid", mid),
+        ("Worst", worst),
+    ]
+
+    labels: List[str] = []
+    values: List[float] = []
+    group_of_bar: List[str] = []
+    for tag, rows in groups:
+        for r in rows:
+            labels.append(row_label(r))
+            values.append(float(r[value_key]))
+            group_of_bar.append(tag)
+
+    cmap = cm.get_cmap(cmap_name)
+    norm = Normalize(vmin=0, vmax=100)
+    colors = [cmap(norm(v)) for v in values]
+
+    fig, ax = plt.subplots(figsize=(max(9, 0.85 * len(labels)), 5.8))
+    x = np.arange(len(labels))
+    bars = ax.bar(x, values, color=colors, edgecolor="black", linewidth=0.6)
+
+    for bar, v in zip(bars, values):
+        ax.text(
+            bar.get_x() + bar.get_width() / 2, bar.get_height() + 1.5,
+            f"{v:.1f}%", ha="center", va="bottom", fontsize=8,
+        )
+
+    for i in range(1, len(groups)):
+        boundary_idx = i * n_per_group
+        ax.axvline(boundary_idx - 0.5, color="#888888", lw=0.7, ls="--")
+
+    for i, (tag, _) in enumerate(groups):
+        center = i * n_per_group + (n_per_group - 1) / 2
+        ax.text(
+            center, 105, tag,
+            ha="center", va="bottom", fontsize=11, fontweight="bold",
+            transform=ax.get_xaxis_transform(),
+        )
+
+    ax.set_ylim(0, 100)
+    ax.set_xticks(x)
+    ax.set_xticklabels(labels, rotation=45, ha="right", fontsize=9)
     ax.set_ylabel(ylabel)
     ax.set_title(title)
 
