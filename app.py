@@ -31,6 +31,7 @@ from engine import (
 )
 from plotting import (
     ranked_bar_chart,
+    best_mid_worst_bar,
     top_violin,
     best_mid_poor_histogram,
     fragment_balance_bar,
@@ -444,6 +445,14 @@ else:
     csv_name = "enzyme_summary.csv"
 
 st.dataframe(df_display, use_container_width=True, height=450)
+st.caption(
+    "**`bp_border_to_first_cut`** = distance (bp) from the edge of the "
+    "selected protected border zone to the closest internal T-DNA cut on "
+    "that side. This is the T-DNA-side contribution to the iPCR amplicon. "
+    "Empty / `None` means there is no internal cut on that side, so the "
+    "iPCR circle would have to use a cut on the opposite border (the "
+    "amplicon will be considerably larger)."
+)
 st.download_button(
     "Download CSV",
     df_display.to_csv(index=False).encode(),
@@ -455,6 +464,7 @@ st.download_button(
 st.subheader("Plots")
 plot_tabs = st.tabs([
     "Ranked bar chart",
+    "Best / Mid / Worst (3 each)",
     "Violin (top N)",
     "Best / Mid / Poor",
     "Fragment balance",
@@ -466,24 +476,39 @@ with plot_tabs[0]:
     st.pyplot(fig)
 
 with plot_tabs[1]:
-    fig = top_violin(collapsed_rows, insertion_sizes_by_label, top_n=top_n_violin)
+    fig = best_mid_worst_bar(collapsed_rows, n_per_group=3)
     st.pyplot(fig)
+    st.caption(
+        "Three bars per group: the **3 highest-ranked**, **3 middle-ranked**, "
+        "and **3 lowest-ranked** enzymes by % usable insertions. Bars are "
+        "colored using the same `YlOrRd` scale (0-100%) as the cut-site "
+        "heatmap, so a given color always means the same usable rate across "
+        "every figure in the app."
+    )
 
 with plot_tabs[2]:
+    fig = top_violin(
+        collapsed_rows, insertion_sizes_by_label,
+        top_n=top_n_violin,
+        useful_min=int(useful_min), useful_max=int(useful_max),
+    )
+    st.pyplot(fig)
+
+with plot_tabs[3]:
     fig = best_mid_poor_histogram(
         collapsed_rows, insertion_sizes_by_label,
         useful_min=int(useful_min), useful_max=int(useful_max),
     )
     st.pyplot(fig)
 
-with plot_tabs[3]:
+with plot_tabs[4]:
     fig = fragment_balance_bar(
         collapsed_rows, insertion_sizes_by_label,
         useful_min=int(useful_min), useful_max=int(useful_max),
     )
     st.pyplot(fig)
 
-with plot_tabs[4]:
+with plot_tabs[5]:
     fig = sites_per_chromosome_heatmap(collapsed_rows, motif_metrics, top_n=15)
     st.pyplot(fig)
 
