@@ -20,9 +20,18 @@ def ranked_bar_chart(
     ylabel: str = "% usable insertions",
     title: str = "Ranked enzyme performance",
     cmap_name: str = "YlOrRd",
+    max_bars: int = 60,
 ) -> plt.Figure:
+    """Bar chart of enzyme performance.
+
+    Capped at ``max_bars`` so the figure stays under the Pillow image-size
+    limit. With 1000 enzymes a per-bar width of 0.28" produces a 280-inch
+    figure, which Streamlit refuses to render. The cap shows the
+    ``max_bars`` highest-ranked enzymes (which is what the user actually
+    cares about; the table below the chart still lists every enzyme).
+    """
     import numpy as np
-    from matplotlib import cm
+    import matplotlib.pyplot as plt
     from matplotlib.colors import Normalize
 
     if not summary_rows:
@@ -30,22 +39,28 @@ def ranked_bar_chart(
         ax.text(0.5, 0.5, "No data", ha="center", va="center")
         return fig
 
-    labels = [row_label(r) for r in summary_rows]
-    values = [float(r[value_key]) for r in summary_rows]
+    rows = summary_rows[:max_bars]
+    labels = [row_label(r) for r in rows]
+    values = [float(r[value_key]) for r in rows]
 
-    cmap = cm.get_cmap(cmap_name)
+    cmap = plt.get_cmap(cmap_name)
     norm = Normalize(vmin=0, vmax=100)
     colors = [cmap(norm(v)) for v in values]
 
-    fig, ax = plt.subplots(figsize=(max(10, 0.28 * len(labels)), 5.5))
+    fig_w = min(28, max(10, 0.28 * len(labels)))
+    fig, ax = plt.subplots(figsize=(fig_w, 5.5))
     ax.bar(range(len(labels)), values, color=colors, edgecolor="black", linewidth=0.4)
     ax.set_ylim(0, 100)
     ax.set_xticks(range(len(labels)))
     ax.set_xticklabels(labels, rotation=75, ha="right", fontsize=7)
     ax.set_ylabel(ylabel)
-    ax.set_title(title)
+    note = (
+        f" (top {len(labels)} of {len(summary_rows):,})"
+        if len(summary_rows) > max_bars else ""
+    )
+    ax.set_title(title + note)
 
-    sm = cm.ScalarMappable(norm=norm, cmap=cmap)
+    sm = plt.cm.ScalarMappable(norm=norm, cmap=cmap)
     sm.set_array(np.asarray(values))
     cbar = fig.colorbar(sm, ax=ax, shrink=0.7, pad=0.02)
     cbar.set_label(ylabel)
@@ -69,7 +84,7 @@ def best_mid_worst_bar(
     color is comparable across all figures in the app.
     """
     import numpy as np
-    from matplotlib import cm
+    import matplotlib.pyplot as plt
     from matplotlib.colors import Normalize
 
     if len(summary_rows) < 3 * n_per_group:
@@ -103,7 +118,7 @@ def best_mid_worst_bar(
             values.append(float(r[value_key]))
             group_of_bar.append(tag)
 
-    cmap = cm.get_cmap(cmap_name)
+    cmap = plt.get_cmap(cmap_name)
     norm = Normalize(vmin=0, vmax=100)
     colors = [cmap(norm(v)) for v in values]
 
@@ -135,7 +150,7 @@ def best_mid_worst_bar(
     ax.set_ylabel(ylabel)
     ax.set_title(title)
 
-    sm = cm.ScalarMappable(norm=norm, cmap=cmap)
+    sm = plt.cm.ScalarMappable(norm=norm, cmap=cmap)
     sm.set_array(np.asarray(values))
     cbar = fig.colorbar(sm, ax=ax, shrink=0.7, pad=0.02)
     cbar.set_label(ylabel)
@@ -254,7 +269,7 @@ def top_violin(
         f"{n_text}."
     )
 
-    fig.tight_layout(rect=(0, 0.18, 1, 1))
+    fig.subplots_adjust(left=0.08, right=0.97, top=0.92, bottom=0.32)
     fig.text(
         0.02, 0.02, caption,
         ha="left", va="bottom", fontsize=8.5, wrap=True,
