@@ -8,6 +8,8 @@ Run with:
 from __future__ import annotations
 
 import hashlib
+
+import matplotlib.pyplot as plt
 import pandas as pd
 import streamlit as st
 
@@ -212,6 +214,13 @@ def _run_analysis(
 
 def _genome_hash(data: bytes) -> str:
     return hashlib.md5(data).hexdigest()
+
+
+def _show(fig) -> None:
+    """Send figure to Streamlit then close it to reduce memory pressure on hosts."""
+    st.pyplot(fig)
+    plt.close(fig)
+
 
 # ── Sidebar inputs ─────────────────────────────────────────────────────────
 with st.sidebar:
@@ -493,11 +502,11 @@ plot_tabs = st.tabs([
 
 with plot_tabs[0]:
     fig = ranked_bar_chart(collapsed_rows)
-    st.pyplot(fig)
+    _show(fig)
 
 with plot_tabs[1]:
     fig = best_mid_worst_bar(collapsed_rows, n_per_group=3)
-    st.pyplot(fig)
+    _show(fig)
     st.caption(
         "Three bars per group: the **3 highest-ranked**, **3 middle-ranked**, "
         "and **3 lowest-ranked** enzymes by % usable insertions. Bars are "
@@ -512,25 +521,25 @@ with plot_tabs[2]:
         top_n=top_n_violin,
         useful_min=int(useful_min), useful_max=int(useful_max),
     )
-    st.pyplot(fig)
+    _show(fig)
 
 with plot_tabs[3]:
     fig = best_mid_poor_histogram(
         collapsed_rows, insertion_sizes_by_label,
         useful_min=int(useful_min), useful_max=int(useful_max),
     )
-    st.pyplot(fig)
+    _show(fig)
 
 with plot_tabs[4]:
     fig = fragment_balance_bar(
         collapsed_rows, insertion_sizes_by_label,
         useful_min=int(useful_min), useful_max=int(useful_max),
     )
-    st.pyplot(fig)
+    _show(fig)
 
 with plot_tabs[5]:
     fig = sites_per_chromosome_heatmap(collapsed_rows, motif_metrics, top_n=15)
-    st.pyplot(fig)
+    _show(fig)
 
 st.divider()
 st.caption(
