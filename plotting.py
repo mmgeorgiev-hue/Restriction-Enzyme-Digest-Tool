@@ -5,13 +5,18 @@ so the caller (Streamlit or a notebook) can display it however it likes.
 
 from __future__ import annotations
 
-from typing import Dict, List, Tuple, Union
+from typing import Dict, List, Tuple
 
 import matplotlib
 matplotlib.use("Agg")
 import matplotlib.pyplot as plt
 
+from matplotlib.transforms import blended_transform_factory
+
 from engine import row_label
+
+# Hard upper bound prevents Pillow "decompression bomb" errors and Cloud OOM kills
+_MAX_FIG_INCHES_SIDE = 24
 
 
 def ranked_bar_chart(
@@ -47,7 +52,7 @@ def ranked_bar_chart(
     norm = Normalize(vmin=0, vmax=100)
     colors = [cmap(norm(v)) for v in values]
 
-    fig_w = min(28, max(10, 0.28 * len(labels)))
+    fig_w = min(_MAX_FIG_INCHES_SIDE, max(10, 0.28 * len(labels)))
     fig, ax = plt.subplots(figsize=(fig_w, 5.5))
     ax.bar(range(len(labels)), values, color=colors, edgecolor="black", linewidth=0.4)
     ax.set_ylim(0, 100)
@@ -65,7 +70,7 @@ def ranked_bar_chart(
     cbar = fig.colorbar(sm, ax=ax, shrink=0.7, pad=0.02)
     cbar.set_label(ylabel)
 
-    fig.tight_layout()
+    fig.subplots_adjust(left=0.07, right=0.93, bottom=0.42, top=0.92)
     return fig
 
 
@@ -111,12 +116,10 @@ def best_mid_worst_bar(
 
     labels: List[str] = []
     values: List[float] = []
-    group_of_bar: List[str] = []
     for tag, rows in groups:
         for r in rows:
             labels.append(row_label(r))
             values.append(float(r[value_key]))
-            group_of_bar.append(tag)
 
     cmap = plt.get_cmap(cmap_name)
     norm = Normalize(vmin=0, vmax=100)
@@ -136,12 +139,13 @@ def best_mid_worst_bar(
         boundary_idx = i * n_per_group
         ax.axvline(boundary_idx - 0.5, color="#888888", lw=0.7, ls="--")
 
+    trans_head = blended_transform_factory(ax.transData, ax.transAxes)
     for i, (tag, _) in enumerate(groups):
         center = i * n_per_group + (n_per_group - 1) / 2
         ax.text(
-            center, 105, tag,
+            center, 1.06, tag, transform=trans_head,
             ha="center", va="bottom", fontsize=11, fontweight="bold",
-            transform=ax.get_xaxis_transform(),
+            clip_on=False,
         )
 
     ax.set_ylim(0, 100)
@@ -155,7 +159,7 @@ def best_mid_worst_bar(
     cbar = fig.colorbar(sm, ax=ax, shrink=0.7, pad=0.02)
     cbar.set_label(ylabel)
 
-    fig.tight_layout()
+    fig.subplots_adjust(left=0.10, right=0.90, bottom=0.26, top=0.74)
     return fig
 
 
@@ -190,7 +194,8 @@ def top_violin(
         ax.text(0.5, 0.5, "No insertion data", ha="center", va="center")
         return fig
 
-    fig, ax = plt.subplots(figsize=(max(10, 0.7 * len(labels)), 5.5))
+    fig_w = min(_MAX_FIG_INCHES_SIDE, max(10, 0.7 * len(labels)))
+    fig, ax = plt.subplots(figsize=(fig_w, 5.5))
 
     try:
         from scipy.stats import gaussian_kde
@@ -377,8 +382,8 @@ def fragment_balance_bar(
         pct_useful.append(100.0 * nu / n)
         pct_large.append(100.0 * nl / n)
 
-    fig_h = max(6, 0.35 * len(labels))
-    fig, ax = plt.subplots(figsize=(12, fig_h))
+    fig_h = min(_MAX_FIG_INCHES_SIDE, max(6, 0.35 * len(labels)))
+    fig, ax = plt.subplots(figsize=(min(14, _MAX_FIG_INCHES_SIDE), fig_h))
     ax.barh(labels, pct_small, color="#d95f02", label=f"< {useful_min:,} bp")
     ax.barh(labels, pct_useful, left=pct_small, color="#1b9e77",
             label=f"Usable ({useful_min:,}\u2013{useful_max:,} bp)")
@@ -445,7 +450,9 @@ def sites_per_chromosome_heatmap(
 
     arr = np.array(matrix, dtype=float)
 
-    fig, ax = plt.subplots(figsize=(max(8, 0.6 * len(all_chroms)), max(5, 0.4 * len(labels))))
+    fig_w = min(_MAX_FIG_INCHES_SIDE, max(8, 0.55 * len(all_chroms)))
+    fig_h = min(_MAX_FIG_INCHES_SIDE, max(5, 0.42 * len(labels)))
+    fig, ax = plt.subplots(figsize=(fig_w, fig_h))
     im = ax.imshow(arr, aspect="auto", cmap="YlOrRd")
     ax.set_xticks(range(len(all_chroms)))
     ax.set_xticklabels(all_chroms, rotation=60, ha="right", fontsize=8)
