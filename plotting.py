@@ -79,12 +79,12 @@ def best_mid_worst_bar(
     n_per_group: int = 3,
     value_key: str = "pct_usable_insertions",
     ylabel: str = "% usable insertions",
-    title: str = "Best, mid, and worst enzymes by % usable insertions",
+    title: str = "",
     cmap_name: str = "YlOrRd",
 ) -> plt.Figure:
     """Bar chart of the top-N, middle-N, and bottom-N enzymes.
 
-    Bars are colored using the same ``YlOrRd`` colormap as the
+    Bars are colored using the same colormap as the
     cut-site heatmap and the full ranked bar chart, normalized 0-100 so
     color is comparable across all figures in the app.
     """
