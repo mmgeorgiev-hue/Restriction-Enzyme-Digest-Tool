@@ -100,6 +100,8 @@ class TransgeneMetrics:
     tdna_no_cut: bool
     selected_border_ok: bool
     ranking_bucket: str
+    #: Contiguous bp of T-DNA backbone from that border's chromosome junction to
+    #: the distal edge of the motif ``[p, p+mlen)`` (cassette/primer bp included).
     bp_border_to_first_cut: Optional[int]
 
 # ---------------------------------------------------------------------------
@@ -451,6 +453,23 @@ def evaluate_transgene(
     border: str = "right",
     protected_bp: int = 300,
 ) -> TransgeneMetrics:
+    """T-DNA border safety and span to first internal restriction site.
+
+    Cuts are at motif start offsets ``p`` (same convention as genome scan).
+
+    **``bp_border_to_first_cut``** is contiguous T-DNA (bp) from the
+    chromosomal junction at the selected border toward the nearest internal motif
+    that survives the cassette filter. It **counts through the cassette /
+    primer window**, not merely the segment between ``protected_bp`` boundary
+    and the motif.
+
+    * **Right border**: ``tdna_len - max(p) - len(motif)`` over motifs that lie
+      entirely LB-ward of the RB ``protected_bp`` cassette.
+    * **Left border**: ``min(p) + len(motif)`` over motifs that lie entirely RB-ward
+      of the LB ``protected_bp`` cassette.
+
+    ``None`` if no motif passes that filter on the inward side selected.
+    """
     tdna_len = len(tdna_seq)
     cuts = find_cut_positions(tdna_seq, motif)
     mlen = len(motif)
@@ -471,12 +490,23 @@ def evaluate_transgene(
     else:
         bucket = "poor_selected_border_cut"
 
+    # Full T-DNA backbone length from chromosome junction toward first eligible
+    # internal cut on the primer side — includes cassette/primer window (not
+    # measured from inner edge of *protected_bp* only).
     if border == "left":
         safe_cuts = [p for p in cuts if p >= protected_bp]
-        bp_to_first = min(safe_cuts) - protected_bp if safe_cuts else None
+        if not safe_cuts:
+            bp_to_first = None
+        else:
+            mp = min(safe_cuts)
+            bp_to_first = mp + mlen
     else:
         safe_cuts = [p for p in cuts if (p + mlen) <= right_start]
-        bp_to_first = (right_start - max(safe_cuts) - mlen) if safe_cuts else None
+        if not safe_cuts:
+            bp_to_first = None
+        else:
+            mp = max(safe_cuts)
+            bp_to_first = tdna_len - mp - mlen
     if bp_to_first is not None and bp_to_first < 0:
         bp_to_first = 0
 
